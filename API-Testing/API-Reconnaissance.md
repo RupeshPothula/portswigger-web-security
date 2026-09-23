@@ -2,248 +2,114 @@
 
 ## Introduction
 
-API reconnaissance is the process of discovering and understanding an application's APIs before performing security testing.
+API reconnaissance is the process of gathering as much information as possible about an API before testing it.
 
-The main goal is to identify:
-
-* API endpoints
-* HTTP methods
-* Parameters
-* Request and response formats
-* Authentication mechanisms
-* API versions
-* Available functionality
-
-Understanding the API structure helps a security tester determine which parts of the application should be tested further.
+The main goal is to understand the API's **attack surface** by identifying its endpoints and determining how those endpoints can be interacted with.
 
 ---
 
-## What is an API?
+## 1. Identifying API Endpoints
 
-An API (Application Programming Interface) allows different software components to communicate with each other.
-
-For example, a web application may use an API to retrieve information about a user's account.
-
-```http
-GET /api/users/123
-```
-
-The server may respond with:
-
-```json
-{
-  "id": 123,
-  "name": "John",
-  "email": "john@example.com"
-}
-```
-
-Here:
-
-* `/api/users/123` is the API endpoint.
-* `GET` is the HTTP method.
-* `123` is a parameter identifying the user.
-* The JSON data is the server's response.
-
----
-
-# Why is API Reconnaissance Important?
-
-Modern web applications often rely heavily on APIs.
-
-An application may have many endpoints that are not directly visible through the user interface.
-
-For example:
-
-```text
-/api/users
-/api/users/123
-/api/products
-/api/orders
-/api/admin
-/api/v1/users
-/api/v2/users
-```
-
-Finding these endpoints gives a better understanding of the application's attack surface.
-
-During reconnaissance, I should not only look for endpoints that are visible in the browser. I should also investigate requests made by the application and any available API documentation.
-
----
-
-# API Attack Surface
-
-The API attack surface consists of the different API endpoints, parameters, methods, and functionality that can potentially be tested.
-
-Important things to identify include:
-
-### 1. Endpoints
-
-Example:
-
-```http
-/api/users
-/api/products
-/api/orders
-```
-
-### 2. HTTP Methods
-
-Common methods include:
-
-```text
-GET
-POST
-PUT
-PATCH
-DELETE
-```
-
-Different methods may provide different functionality for the same resource.
-
-### 3. Parameters
-
-Parameters can appear in different locations.
-
-Query parameter:
-
-```http
-GET /api/users?id=123
-```
-
-Path parameter:
-
-```http
-GET /api/users/123
-```
-
-Body parameter:
-
-```json
-{
-  "username": "john"
-}
-```
-
-### 4. Authentication
-
-I need to determine whether an endpoint requires authentication and what type of authentication is being used.
-
-Examples include:
-
-```text
-Session cookies
-API keys
-Bearer tokens
-JWT
-```
-
-### 5. API Versions
-
-Applications may expose multiple API versions:
-
-```text
-/api/v1/users
-/api/v2/users
-```
-
-Different versions may have different functionality or security configurations.
-
----
-
-# API Reconnaissance Techniques
-
-## 1. Inspecting Application Traffic
-
-One of the most useful techniques is observing the requests made by the application.
-
-Using Burp Suite, I can intercept HTTP requests and identify API endpoints.
+An **API endpoint** is a location where an API receives requests for a specific resource on the server.
 
 For example:
 
 ```http
-GET /api/products/1 HTTP/1.1
+GET /api/books HTTP/1.1
 Host: example.com
-Cookie: session=...
 ```
 
-From this request, I can identify:
-
-* The API endpoint
-* HTTP method
-* Host
-* Authentication/session information
-* Parameters
-
----
-
-## 2. Using Burp Suite Proxy
-
-Burp Suite's Proxy can be used to intercept requests between the browser and the server.
-
-A basic workflow is:
+The API endpoint in this request is:
 
 ```text
-Browser
-   ↓
-Burp Suite Proxy
-   ↓
-Web Application
-   ↓
-Server
+/api/books
 ```
 
-While using the application, I can observe requests and identify API endpoints.
+This endpoint could be used to retrieve a list of books from a library.
 
----
-
-## 3. Burp Suite HTTP History
-
-Burp Suite's HTTP history is useful for reviewing requests that have already been captured.
-
-I can look for requests containing paths such as:
+Another endpoint could be:
 
 ```text
-/api/
-/api/v1/
-/api/v2/
+/api/books/mystery
 ```
 
-This can reveal APIs that are being used by the application.
+This could retrieve a list of mystery books.
+
+Therefore, identifying API endpoints is one of the first steps in API reconnaissance.
 
 ---
 
-## 4. Identifying API Endpoints
+## 2. Understanding How to Interact With Endpoints
 
-While reviewing requests, I look for patterns such as:
+After identifying API endpoints, the next step is to determine how to interact with them.
+
+This information helps in constructing valid HTTP requests that can later be used to test the API.
+
+Important information to identify includes:
+
+### Input Data
+
+Determine what input data the API processes.
+
+This includes:
+
+* Compulsory parameters
+* Optional parameters
+
+Understanding these parameters helps determine what data can be supplied to an endpoint.
+
+### Supported Requests
+
+Determine what types of requests the API accepts.
+
+This includes:
+
+* Supported HTTP methods
+* Supported media formats
+
+For example, an endpoint might accept a particular HTTP method and require data in a specific format.
+
+### Rate Limits
+
+Determine whether the API has any **rate limits**.
+
+Rate limits control how frequently requests can be made to an API.
+
+Understanding the API's rate limits is part of determining how the API can be interacted with.
+
+### Authentication
+
+Identify the **authentication mechanisms** used by the API.
+
+This helps determine what authentication is required when interacting with different endpoints.
+
+---
+
+## API Reconnaissance Process
+
+A basic API reconnaissance process can be summarized as:
 
 ```text
-/api/users
-/api/products
-/api/orders
-/api/account
-/api/admin
+Find API endpoints
+        ↓
+Identify the resources they provide
+        ↓
+Determine required and optional input
+        ↓
+Identify supported HTTP methods and media formats
+        ↓
+Identify rate limits
+        ↓
+Identify authentication mechanisms
 ```
-
-I also pay attention to parameters and HTTP methods associated with each endpoint.
-
-For example:
-
-```http
-GET /api/users/123
-```
-
-and
-
-```http
-DELETE /api/users/123
-```
-
-may refer to the same resource but provide completely different functionality.
 
 ---
 
+## Key Takeaways
 
-## Source
-
-This topic was studied as part of the **API Testing** module of PortSwigger Web Security Academy.
+* API reconnaissance is performed to understand an API's attack surface.
+* API endpoints are locations where the API receives requests for specific resources.
+* After finding endpoints, it is important to understand how to interact with them.
+* Input data can contain compulsory and optional parameters.
+* The supported HTTP methods and media formats should be identified.
+* Rate limits and authentication mechanisms are also important parts of API reconnaissance.
