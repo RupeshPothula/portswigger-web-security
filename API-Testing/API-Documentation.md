@@ -2,284 +2,174 @@
 
 ## Introduction
 
-API documentation is a reference that explains how an API works and how clients can interact with its endpoints.
+APIs are usually documented so that developers can understand how to use and integrate with them.
 
-It can provide information about:
-
-* Available API endpoints
-* HTTP methods
-* Parameters
-* Request formats
-* Response formats
-* Authentication requirements
-* API versions
-* Available resources and functionality
-
-For a security tester, API documentation can be very useful during reconnaissance because it can reveal the application's API attack surface.
+API documentation can provide useful information about the API and can therefore be an important source of information during API reconnaissance.
 
 ---
 
-## What is API Documentation?
+## Types of API Documentation
 
-API documentation describes the functionality provided by an API.
+API documentation can generally be provided in two forms:
 
-For example, documentation might describe an endpoint like:
+### 1. Human-Readable Documentation
 
-```http
-GET /api/users/{id}
-```
+Human-readable documentation is designed for developers to understand how to use an API.
 
-It may explain:
+It may contain:
 
-* What the endpoint does
-* Which HTTP method should be used
-* Which parameters are required
-* What authentication is required
-* What response the server returns
+* Detailed explanations
+* Examples
+* Usage scenarios
 
-A documented API makes it easier for developers and users to understand how to interact with the application.
-
-From a security testing perspective, the same information can help identify endpoints that need further testing.
+This makes it easier for developers to understand how the API works and how to integrate it into an application.
 
 ---
 
-# Why is API Documentation Important for Security Testing?
+### 2. Machine-Readable Documentation
 
-API documentation can reveal information about an application's functionality that may not be obvious from the normal user interface.
+Machine-readable documentation is designed to be processed by software.
 
-For example, an application might expose:
+It can be used for tasks such as:
+
+* Automating API integration
+* API validation
+* Analyzing API functionality
+
+Machine-readable documentation is commonly written in structured formats such as:
 
 ```text
-/api/users
-/api/orders
-/api/products
-/api/admin
-```
-
-Some of these endpoints may not have a visible link or button in the application.
-
-By discovering API documentation, a tester can build a better understanding of the available endpoints and functionality.
-
----
-
-# Common API Documentation Formats
-
-Two commonly encountered API documentation specifications are:
-
-### OpenAPI
-
-OpenAPI is a specification used to describe REST APIs in a structured format.
-
-An OpenAPI document can describe:
-
-* Endpoints
-* HTTP methods
-* Parameters
-* Request bodies
-* Responses
-* Authentication schemes
-
-It is commonly represented using JSON or YAML.
-
-Example:
-
-```yaml
-paths:
-  /api/users:
-    get:
-      summary: Get users
+JSON
+XML
 ```
 
 ---
 
-### SOAP Documentation
+## Finding API Documentation
 
-SOAP APIs can also have documentation describing their available operations.
+API documentation is often publicly available, especially when an API is intended for use by external developers.
 
-SOAP services commonly use **WSDL (Web Services Description Language)** to describe the service.
+When documentation is publicly available, reviewing it should be an early step in API reconnaissance.
 
-A WSDL document can provide information about:
+However, API documentation may not always be openly available.
 
-* Available operations
-* Request structure
-* Response structure
-* Data types
-* Service endpoints
+In such cases, it may still be possible to discover documentation by examining applications that use the API.
 
 ---
 
-# Finding API Documentation
+## Discovering API Documentation With Burp Suite
 
-API documentation may be available at predictable locations.
+Burp Suite can be used to help discover API documentation.
+
+### Burp Scanner
+
+**Burp Scanner** can crawl an API and help identify endpoints that may contain API documentation.
+
+### Burp's Browser
+
+Applications can also be browsed manually using **Burp's browser**.
+
+While browsing, look for endpoints that may refer to API documentation.
+
+Common examples include:
+
+```text
+/api
+/swagger/index.html
+/openapi.json
+```
+
+---
+
+## Investigating Base Paths
+
+When an API resource endpoint is identified, it is useful to investigate the **base paths** leading to that endpoint.
+
+For example, suppose the following resource endpoint is identified:
+
+```text
+/api/swagger/v1/users/123
+```
+
+Instead of looking only at the complete endpoint, investigate the paths above it:
+
+```text
+/api/swagger/v1
+/api/swagger
+/api
+```
+
+This can help identify API documentation located at a higher level in the path structure.
+
+---
+
+## Using Intruder to Discover Documentation
+
+Burp Suite's **Intruder** can also be used with a list of common paths to search for API documentation.
+
+This can help when the documentation is not immediately obvious.
+
+---
+
+## Using Machine-Readable Documentation
+
+Once machine-readable API documentation is discovered, automated tools can be used to analyze it.
+
+### Burp Scanner
+
+Burp Scanner can crawl and audit **OpenAPI documentation** as well as other documentation provided in formats such as:
+
+```text
+JSON
+YAML
+```
+
+### OpenAPI Parser
+
+The **OpenAPI Parser** BApp can be used to parse OpenAPI documentation.
+
+### Specialized API Testing Tools
+
+Specialized tools can also be used to test documented API endpoints.
 
 Examples include:
 
 ```text
-/swagger
-/swagger-ui
-/openapi.json
-/openapi.yaml
-/api-docs
-```
-
-These locations are only examples. The actual location depends on how the application was developed and configured.
-
-API documentation may also be referenced by the application's source code, JavaScript files, or network requests.
-
----
-
-# Documentation as a Reconnaissance Source
-
-When API documentation is discovered, I can use it to understand the API before testing it.
-
-For example:
-
-```text
-Endpoint:
-GET /api/users/{id}
-
-Method:
-GET
-
-Parameter:
-id
-
-Purpose:
-Retrieve information about a user
-```
-
-This gives me a structured view of the API.
-
-I can then compare the documented API with the endpoints actually used by the application.
-
----
-
-# Documented vs Undocumented APIs
-
-An important part of API reconnaissance is understanding that documentation may not represent the complete API.
-
-For example, documentation may show:
-
-```text
-GET /api/users
-GET /api/products
-```
-
-But application traffic might reveal additional endpoints:
-
-```text
-GET /api/orders
-GET /api/profile
-```
-
-Therefore, I should not assume that the documentation contains every available endpoint.
-
-Documentation and observed application traffic can be used together to build a more complete picture of the API.
-
----
-
-# What to Look for in API Documentation
-
-When reviewing API documentation, I should identify:
-
-### Endpoints
-
-What API endpoints are available?
-
-```text
-/api/users
-/api/products
-/api/orders
-```
-
-### HTTP Methods
-
-Which methods are supported?
-
-```text
-GET
-POST
-PUT
-PATCH
-DELETE
-```
-
-### Parameters
-
-What parameters does each endpoint accept?
-
-```text
-id
-username
-productId
-orderId
-```
-
-### Request Bodies
-
-Does the endpoint accept JSON or another data format?
-
-Example:
-
-```json
-{
-  "username": "john",
-  "email": "john@example.com"
-}
-```
-
-### Authentication
-
-Does the endpoint require authentication?
-
-Possible mechanisms include:
-
-```text
-Session cookies
-API keys
-Bearer tokens
-JWT
-```
-
-### Responses
-
-What data does the endpoint return?
-
-Example:
-
-```json
-{
-  "id": 123,
-  "username": "john"
-}
+Postman
+SoapUI
 ```
 
 ---
 
-# Using Burp Suite
-
-Burp Suite can help compare API documentation with actual application behavior.
-
-A basic workflow is:
+## API Documentation Reconnaissance Flow
 
 ```text
-API Documentation
-       ↓
-Identify endpoints
-       ↓
-Use the application
-       ↓
-Capture requests in Burp Suite
-       ↓
-Compare documented and observed endpoints
-       ↓
-Understand the API attack surface
+Look for API documentation
+          ↓
+Check publicly available documentation
+          ↓
+If unavailable, inspect applications using the API
+          ↓
+Use Burp Scanner / Burp Browser
+          ↓
+Investigate possible documentation paths
+          ↓
+Analyze machine-readable documentation
+          ↓
+Test documented endpoints with suitable tools
 ```
-
-Burp Suite can also be used to send captured requests to **Repeater**, where requests can be inspected and modified during authorized testing.
 
 ---
 
-## Source
+## Key Takeaways
 
-This topic was studied as part of the **API Testing** module of PortSwigger Web Security Academy.
+* API documentation helps developers understand how to use and integrate APIs.
+* Documentation can be human-readable or machine-readable.
+* Machine-readable documentation can use formats such as JSON or XML.
+* Public API documentation should be reviewed during reconnaissance.
+* API documentation can sometimes be discovered by examining applications that use the API.
+* Common documentation paths include `/api`, `/swagger/index.html`, and `/openapi.json`.
+* When an API resource is discovered, its base paths should also be investigated.
+* Burp Scanner and Burp's browser can help discover API documentation.
+* Intruder can be used with common paths to search for documentation.
+* Machine-readable documentation can be analyzed using tools such as Burp Scanner and OpenAPI Parser.
