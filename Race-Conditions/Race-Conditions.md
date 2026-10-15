@@ -29,13 +29,6 @@ Depending on the application's functionality, race conditions can lead to:
 - Bypassing rate limits or reusing CAPTCHA solutions.
 - Manipulating ratings or other restricted actions.
 
-### Types of Race Conditions
-
-Race condition vulnerabilities can occur in different situations, including:
-
-- **Limit overrun race conditions:** Exploiting concurrent requests to exceed a business logic limit, such as a single-use discount or request limit.
-- **Other state-based race conditions:** Exploiting unexpected interactions between concurrent operations or intermediate application states, including complex multi-step processes.
-
 ### Detection and Prevention
 
 **Detection:**
@@ -52,5 +45,4 @@ Race condition vulnerabilities can occur in different situations, including:
 ## Further Reading
 
 - [PortSwigger Web Security Academy — Race Conditions](https://portswigger.net/web-security/race-conditions)
-- [PortSwigger Research — Smashing the State Machine: The True Potential of Web Race Conditions](https://portswigger.net/research/smashing-the-state-machine)
 
