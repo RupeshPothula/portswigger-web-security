@@ -1,0 +1,403 @@
+Hidden Multi-Step Sequences in Web Race Conditions
+
+1. Core concept
+A hidden multi-step sequence occurs when one HTTP request triggers
+several internal operations and the application passes through
+intermediate states before the request finishes. These intermediate
+states are called sub-states.
+
+A race condition may occur when another request interacts with the same
+data while the first request is partway through that sequence. If the
+application temporarily exposes an unsafe state, the second request may
+observe or use it before the application reaches its intended final
+state.
+
+This is broader than simple limit overruns. The issue may involve
+authentication, account recovery, payments, workflow approvals, profile
+changes, or other operations that touch shared state.
+Key terms
+- Race condition: The result depends on the timing or interleaving
+  of concurrent operations.
+- Collision: Two or more requests operate on the same record or
+  shared state in a way that may interfere.
+- Sub-state: A temporary intermediate state within a larger
+  workflow.
+- Benchmark: The behavior observed when requests are sent under
+  normal, non-concurrent conditions.
+- Second-order effect: A later observable consequence, such as an
+  email, audit event, account state change, or altered behavior on a
+  subsequent page.
+2. Why hidden sub-states matter
+Consider a simplified MFA login flow:
+session["userid"] = user.id
+
+if user.mfa_enabled:
+    session["enforce_mfa"] = True
+    # Generate and send an MFA code.
+    # Redirect to the MFA entry page.
+If the application sets the authenticated user identity before it
+enables or enforces the MFA requirement, there may be a brief
+intermediate state in which the session appears authenticated but MFA
+enforcement is not yet active.
+
+A concurrent request to a sensitive authenticated endpoint might arrive
+during that interval. Whether this is exploitable depends on the
+application's actual session handling, request scheduling, and
+authorization checks; the pseudocode alone does not prove a
+vulnerability.
+
+Security invariant: A session must not gain access to MFA-protected
+resources until the required MFA step has been successfully completed.
+Authorization should be enforced server-side on every relevant request,
+not just through redirects or front-end navigation.
+
+The same reasoning applies to other workflows: identify the intended
+security invariant, then investigate whether concurrency can expose a
+temporary violation of it.
+3. The methodology: Predict, Probe, Prove
+Use the following three-stage process:
+1. Predict --- Identify security-critical endpoints and determine
+   which requests could collide on the same record or state.
+2. Probe --- Establish normal behavior, then compare it with
+   carefully synchronized concurrent requests.
+3. Prove --- Reduce the test to the smallest repeatable case and
+   demonstrate the security-relevant impact.
+Do not test every endpoint indiscriminately. Prioritize high-impact
+operations and plausible shared-state interactions.
+4. Phase 1 --- Predict potential collisions
+4.1 Map the application
+As part of authorized reconnaissance, map the relevant workflows and
+record:
+- Endpoints and HTTP methods.
+- Authentication and authorization requirements.
+- Records or state each endpoint reads or modifies.
+- Session, token, and MFA transitions.
+- Related background jobs, email/SMS notifications, and asynchronous
+  processing.
+- Whether multiple requests can act on the same account, order, reset
+  token, transaction, or other object.
+4.2 Ask two questions for each candidate
+A. Is this endpoint security-critical?
+
+Prioritize endpoints that can affect:
+- Login, MFA, session creation, or privilege changes.
+- Password reset, account recovery, or email/phone verification.
+- Payments, purchases, balances, coupons, inventory, or quotas.
+- Permission changes, approvals, invitations, or account ownership.
+- Sensitive records or actions protected by an authorization decision.
+B. Is there collision potential?
+
+Look for two or more requests that can affect the same record or
+shared state. Similar-looking requests that operate on entirely
+separate records may not create the relevant collision.
+
+Example:
+- Low apparent collision potential: Two reset requests affect
+  unrelated user records.
+- Higher potential: Two requests update the same account's reset
+  state, token, or verification status.
+The second case is worth investigating because the operations may
+interleave over shared state. It is a candidate, not proof.
+4.3 Build a collision matrix
+  Request A         Request B         Shared state          Why it may matter
+  Login/MFA         Sensitive         Session and MFA state A temporary
+  initiation        authenticated                           authentication-state
+                    action                                  inconsistency
+
+  Password-reset    Another           Reset token/status    Token replacement or
+  initiation        reset-related     for one account       inconsistent reset
+                    request                                 state
+
+  Apply discount    Submit order      Order and discount    Discount validation
+                                      usage                 and order creation may
+                                                            interleave
+
+  Change            Access protected  User                  A stale or partially
+  permissions       resource          roles/authorization   updated authorization
+                                      state                 decision
+
+  Redeem benefit    Redeem same       Redemption record or  Duplicate or
+                    benefit again     quota                 inconsistent state
+                                                        transition
+Adapt these examples to the application's actual design. Do not assume
+that a given pair is vulnerable just because it appears in this table.
+4.4 Record a hypothesis before testing
+For each candidate, write down:
+- Expected invariant: What must always remain true?
+- Request A: The operation that may create an intermediate state.
+- Request B: The operation that may observe or exploit that state.
+- Shared object/state: The exact account, record, token, order, or
+  session involved.
+- Expected normal result: What should happen sequentially?
+- Potential concurrent deviation: What observation would indicate
+  a problem?
+A clear hypothesis makes it easier to distinguish a genuine race
+condition from ordinary application behavior.
+5. Phase 2 --- Probe for clues
+The aim is to compare normal behavior with concurrent behavior while
+controlling avoidable sources of noise.
+5.1 Establish a baseline
+Before sending requests concurrently:
+1. Use a controlled test account and known test data.
+2. Capture the relevant requests and responses.
+3. Send the candidate requests sequentially.
+4. Record status codes, response bodies, redirects, timing, cookies,
+   and relevant headers.
+5. Check the resulting application state.
+6. Inspect second-order effects where relevant, such as test emails,
+   notifications, audit logs, or transaction records.
+7. Repeat the baseline if behavior is inconsistent.
+In Burp Repeater, requests can be grouped and sent with Send group in
+sequence (separate connections). See the Burp Repeater
+documentation.
+
+Keep the requests, session state, and test data consistent between
+baseline and concurrent runs. Otherwise, the comparison may be
+misleading.
+5.2 Send requests concurrently
+Once the baseline is understood:
+1. Group the candidate requests in Burp Repeater.
+2. Use Send group in parallel to compare concurrent behavior with
+   the sequential baseline.
+3. Where supported and appropriate, use a synchronization technique
+   that reduces network jitter, such as Burp's single-packet attack.
+4. If HTTP/2-based synchronization is unavailable, consider the
+   documented last-byte synchronization approach where supported.
+5. Repeat the test enough times to determine whether the result is
+   consistent.
+6. Compare both immediate responses and the final server-side state.
+See Burp Repeater: Sending requests in
+parallel.
+
+An alternative for authorized testing is Turbo
+Intruder,
+a Burp extension for sending and analyzing large numbers of requests.
+Use the minimum request volume needed; avoid creating unnecessary load.
+5.3 Look for deviations
+A clue is any meaningful difference between the sequential baseline and
+the concurrent run, including:
+- Different status codes, response bodies, or redirects.
+- An unexpected success or authorization result.
+- A response that reflects an inconsistent or stale state.
+- A changed cookie, token, session property, or workflow state.
+- Duplicate or missing records.
+- An unexpected email, notification, audit event, or transaction.
+- A persistent change in application behavior after the requests
+  complete.
+A different response is only a clue. It may result from ordinary
+nondeterminism, rate limiting, caching, network errors, or test setup.
+Verify the effect against the expected invariant before concluding that
+a vulnerability exists.
+5.4 Optional Burp Professional aid
+Burp Professional users may be able to use PortSwigger's Trigger race
+conditions custom
+action
+to send parallel requests from Repeater. Availability and behavior
+depend on the Burp version and configuration. Review the relevant
+Custom actions
+documentation.
+
+A helper can speed up probing, but it does not replace a baseline, state
+inspection, or proof of impact.
+6. Phase 3 --- Prove the concept
+A convincing finding requires more than one surprising response.
+6.1 Minimize the test
+1. Identify which requests are necessary to reproduce the behavior.
+2. Remove unrelated requests and unnecessary variables.
+3. Keep the account, object, session, and preconditions controlled.
+4. Repeat the smallest test sequentially and concurrently.
+5. Confirm that the behavior is tied to the concurrency pattern rather
+   than a different request body, session, token, or test state.
+6.2 Verify the security invariant
+Check whether the concurrent execution violates the invariant written
+during the prediction phase. For example:
+- Was a protected action accepted before MFA completion?
+- Was a one-time token accepted more than once?
+- Was an authorization decision made using an inconsistent state?
+- Did a transaction or redemption occur more times than allowed?
+Use safe, observable proof in a test environment. Do not infer impact
+solely from timing differences or an unusual HTTP response.
+6.3 Confirm repeatability and impact
+- Repeat the minimal case to estimate reliability.
+- Record successful and unsuccessful attempts.
+- Verify the final server-side state where possible.
+- Determine which security boundary or business rule was crossed.
+- Stop once sufficient evidence exists; avoid unnecessary load or
+  destructive actions.
+6.4 Think structurally
+Treat a race condition as a possible structural weakness in state
+transitions, not just an isolated endpoint bug. Ask why the
+intermediate state existed and whether related workflows share the same
+design flaw.
+
+For example, if authorization depends on multiple fields being updated
+together, check whether the application enforces a safe state transition
+atomically and whether every sensitive endpoint checks the required
+conditions.
+7. Burp Suite workflow
+A repeatable high-level workflow:
+1. Capture: Intercept the relevant requests while walking through
+   the workflow normally.
+2. Prepare: Send the requests to Repeater and keep a controlled
+   test session.
+3. Sequence: Group the requests and send them sequentially to
+   establish a baseline.
+4. Record: Save responses and inspect resulting application state.
+5. Parallelize: Send the same candidate requests in parallel with
+   an appropriate synchronization option.
+6. Compare: Review response differences and side effects.
+7. Reduce: Remove unnecessary requests until the smallest case
+   remains.
+8. Repeat: Re-run the baseline and concurrent test to assess
+   reliability.
+9. Document: Preserve sanitized requests, timestamps, responses,
+   and state evidence.
+Use the precise option names available in your installed Burp version;
+the interface may change.
+8. What to observe
+Use a consistent observation record for each run.
+  Observation                         Record
+  Test identifier                     Unique label for the test run
+
+  Preconditions                       Account state, roles, MFA status,
+                                      tokens, object state
+
+  Execution mode                      Sequential or concurrent;
+                                      synchronization method
+
+  Request pair/group                  Endpoint and method, with secrets
+                                      removed
+
+  Response evidence                   Status, relevant headers, body
+                                      differences, redirect
+
+  Timing                              Start/end timestamps if available;
+                                      avoid treating timing alone as
+                                      proof
+
+  Side effects                        Emails, notifications, audit
+                                      events, created/modified records
+
+  Final state                         The server-side state after all
+                                      requests finish
+
+  Repeatability                       Number of attempts and number of
+                                      observed deviations
+
+  Invariant result                    Whether the expected security rule
+                                      held
+
+  Conclusion                          No issue observed, inconclusive, or
+                                  reproducible finding
+Response comparison tips
+- Compare semantically relevant fields, not just raw response length.
+- Redact session cookies, authorization headers, passwords, MFA codes,
+  reset tokens, and personal data from saved evidence.
+- Check whether redirects are hiding a server-side state change.
+- Where possible, inspect the final state through a trusted test
+  interface or server-side logs.
+- Keep test data unique enough to distinguish one run from another.
+9. Common pitfalls
+- Testing unrelated records: Requests may not collide if they
+  never touch shared state.
+- Skipping the baseline: Without normal behavior, a deviation is
+  difficult to interpret.
+- Changing multiple variables: A different session or token can
+  explain the result.
+- Relying on one attempt: Race behavior can be intermittent.
+- Treating timing as proof: A fast response does not establish a
+  security impact.
+- Ignoring side effects: The response may look normal while the
+  final state or a notification differs.
+- Overloading the target: Excessive parallel traffic can cause
+  noise, disrupt service, and obscure the result.
+- Assuming a redirect enforces security: Server-side authorization
+  must protect the sensitive operation itself.
+- Stopping at discovery: A clue is not a confirmed vulnerability
+  until the relevant invariant violation is demonstrated.
+- Overstating the result: Report only the impact supported by
+  repeatable evidence.
+10. Test worksheet and checklist
+Copy this section for each candidate workflow.
+Candidate details
+- [ ] Application and environment documented.
+- [ ] Permission to test confirmed.
+- [ ] Test account and non-production data prepared.
+- [ ] Workflow and relevant endpoints mapped.
+- [ ] Security-critical operation identified.
+- [ ] Shared record or state identified.
+- [ ] Expected security invariant written down.
+- [ ] Sequential baseline captured.
+- [ ] Concurrent test run with controlled conditions.
+- [ ] Responses and final state compared.
+- [ ] Second-order effects checked where relevant.
+- [ ] Test repeated to assess reliability.
+- [ ] Minimal reproduction isolated.
+- [ ] Secrets and personal data redacted from evidence.
+- [ ] Impact and limitations documented.
+- [ ] Testing stopped once sufficient proof was collected.
+Result summary
+- Hypothesis:
+- Expected invariant:
+- Request A:
+- Request B:
+- Shared state:
+- Sequential result:
+- Concurrent result:
+- Final-state evidence:
+- Repeatability:
+- Security impact:
+- Conclusion: No issue observed / Inconclusive / Reproducible
+  finding
+11. Reporting findings
+A useful report should include:
+1. Title: State the workflow and the race-condition class.
+2. Summary: Explain the violated invariant in plain language.
+3. Affected component: Identify the relevant endpoint(s) and
+   workflow.
+4. Preconditions: Describe the account state, permissions, and
+   required setup.
+5. Reproduction: Provide the smallest sequential baseline and
+   concurrent test procedure.
+6. Evidence: Include sanitized requests/responses and the
+   final-state or side-effect proof.
+7. Reliability: State how often the behavior reproduced and any
+   relevant limitations.
+8. Impact: Describe the demonstrated security or business-rule
+   consequence without speculation.
+9. Remediation direction: Explain the state transition or
+   authorization check that must be made safe.
+Defensive remediation ideas
+The right fix depends on the root cause, but common approaches include:
+- Enforce authorization and MFA completion on every sensitive
+  server-side operation.
+- Avoid exposing partially authenticated sessions; represent
+  authentication state explicitly.
+- Make security-critical state transitions atomic where possible.
+- Use database transactions, appropriate locking, uniqueness
+  constraints, or compare-and-swap/version checks when suitable for
+  the data model.
+- Make one-time operations genuinely single-use and enforce that
+  property at the data layer.
+- Ensure validation and the consequential state change cannot be
+  separated by an unsafe race window.
+- Add concurrency-focused regression tests for the invariant, not only
+  for one observed request sequence.
+A UI redirect or client-side check is not a substitute for server-side
+enforcement.
+12. References
+- PortSwigger Research, Smashing the state machine: The true
+  potential of web race conditions
+  https://portswigger.net/research/smashing-the-state-machine
+- PortSwigger Web Security Academy, Race conditions
+  https://portswigger.net/web-security/race-conditions
+- Burp Suite documentation, Sending requests in sequence
+  https://portswigger.net/burp/documentation/desktop/tools/repeater/send-group#sending-requests-in-sequence
+- Burp Suite documentation, Sending requests in parallel
+  https://portswigger.net/burp/documentation/desktop/tools/repeater/send-group#sending-requests-in-parallel
+- Burp Suite documentation, Custom actions
+  https://portswigger.net/burp/documentation/desktop/tools/repeater/http-messages/custom-actions
+- PortSwigger BApp Store, Turbo Intruder
+  https://portswigger.net/bappstore/9abaa233088242e8be252cd4ff534988
+- PortSwigger Bambda example, Probe for Race Condition
+  https://github.com/PortSwigger/bambdas/blob/main/CustomAction/ProbeForRaceCondition.bambda
